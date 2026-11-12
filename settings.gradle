@@ -1,2 +1,7 @@
 include ':app'
-rootProject.name = "Olauncher"
+include ':core'
+include ':config'
+include ':appmodel'
+include ':window'
+include ':card'
+rootProject.name = "ddzm"

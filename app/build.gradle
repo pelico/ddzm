@@ -49,6 +49,13 @@ android {
 }
 
 dependencies {
+    // ddzm framework modules
+    implementation project(':core')
+    implementation project(':config')
+    implementation project(':appmodel')
+    implementation project(':window')
+    implementation project(':card')
+
     implementation fileTree(dir: "libs", include: ["*.jar"])
     implementation libs.kotlin.stdlib
     implementation libs.core.ktx
