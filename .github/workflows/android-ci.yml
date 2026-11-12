@@ -1,0 +1,131 @@
+name: Android CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      emulator_smoke:
+        description: 'Run Android emulator smoke test'
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: android-ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  # ubuntu-latest has 7 GB RAM; upstream gradle.properties asks for 4.5 GB heap,
+  # which leaves too little for the Kotlin daemon on CI. Override here only.
+  GRADLE_ARGS: '--stacktrace -Dorg.gradle.jvmargs=-Xmx3072m'
+
+jobs:
+  build:
+    name: Build + unit tests + debug APK
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Install compileSdk 36 components
+        run: sdkmanager --install "platforms;android-36" "build-tools;36.0.0" "platform-tools" > /dev/null
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Structure self-check
+        run: node scripts/verify-structure.mjs
+
+      - name: JVM unit tests (all modules)
+        run: ./gradlew $GRADLE_ARGS testDebugUnitTest
+
+      - name: Assemble debug APK
+        run: ./gradlew $GRADLE_ARGS assembleDebug
+
+      - name: Inspect APK
+        run: |
+          APK=$(find app/build/outputs/apk/debug -name '*.apk' -print -quit)
+          test -n "$APK" || { echo "::error::no APK produced"; exit 1; }
+          echo "APK=$APK size=$(stat -c%s "$APK") bytes"
+          unzip -l "$APK" | grep -E 'AndroidManifest.xml|classes[0-9]*\.dex|resources.arsc' || true
+          AAPT=$(find "$ANDROID_HOME/build-tools" -type f -name aapt2 2>/dev/null | sort | tail -1)
+          if [ -n "$AAPT" ]; then
+            if "$AAPT" dump xmltree "$APK" --file AndroidManifest.xml 2>/dev/null | grep -q 'android.intent.category.HOME'; then
+              echo "HOME category: present (launcher role eligible)"
+            else
+              echo "::warning::HOME category not found in binary manifest dump"
+            fi
+          fi
+
+      - name: Upload debug APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: ddzm-debug-apk
+          path: app/build/outputs/apk/debug/*.apk
+          retention-days: 14
+
+      - name: Upload reports on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-reports
+          path: |
+            **/build/reports/
+            **/build/test-results/
+          if-no-files-found: ignore
+
+  emulator-smoke:
+    name: Emulator smoke (manual trigger)
+    if: github.event_name == 'workflow_dispatch' && inputs.emulator_smoke
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Enable KVM
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - uses: android-actions/setup-android@v3
+
+      - uses: gradle/actions/setup-gradle@v4
+
+      - name: Emulator smoke test
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 34
+          arch: x86_64
+          target: google_apis
+          profile: pixel_6
+          disable-animations: true
+          emulator-options: -no-snapshot-save -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim
+          script: bash scripts/emulator-smoke.sh
+
+      - name: Upload smoke artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: emulator-smoke-artifacts
+          path: smoke-artifacts/
+          if-no-files-found: ignore
