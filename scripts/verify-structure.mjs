@@ -110,7 +110,24 @@ for (const file of ktFiles) {
   }
 }
 
-// ---- 4. 关键装配检查 ----
+// ---- 4. Gradle 配置一致性 ----
+const sdkVersions = new Map();
+for (const mod of modules) {
+  const gradle = read(`${mod}/build.gradle`);
+  const sdk = gradle.match(/compileSdk\s+(\d+)/)?.[1];
+  const namespace = gradle.match(/namespace\s+['"]([^'"]+)['"]/)?.[1];
+  if (!sdk) errors.push(`:${mod}: missing compileSdk`);
+  else sdkVersions.set(mod, sdk);
+  if (!namespace) errors.push(`:${mod}: missing namespace`);
+  if (!/sourceCompatibility JavaVersion\.VERSION_17/.test(gradle)) {
+    errors.push(`:${mod}: Java 17 sourceCompatibility missing`);
+  }
+}
+if (new Set(sdkVersions.values()).size > 1) {
+  errors.push(`inconsistent compileSdk: ${JSON.stringify(Object.fromEntries(sdkVersions))}`);
+}
+
+// ---- 5. 关键装配检查 ----
 if (exists('app/src/main/AndroidManifest.xml')) {
   const manifest = read('app/src/main/AndroidManifest.xml');
   if (!manifest.includes('android:name=".DdzmApplication"')) {
