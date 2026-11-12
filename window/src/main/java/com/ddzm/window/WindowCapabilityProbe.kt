@@ -34,9 +34,11 @@ class WindowCapabilityProbe(
             granted += Capability.OVERLAY_WINDOW
         }
 
+        // Settings.Secure.ENABLED_NOTIFICATION_LISTENERS is @hide in the public SDK;
+        // the key is stable AOSP contract, so use the literal instead.
         val listeners = Settings.Secure.getString(
             appContext.contentResolver,
-            Settings.Secure.ENABLED_NOTIFICATION_LISTENERS
+            "enabled_notification_listeners"
         )
         if (listeners != null && listeners.contains(appContext.packageName)) {
             granted += Capability.NOTIFICATION_LISTENER
