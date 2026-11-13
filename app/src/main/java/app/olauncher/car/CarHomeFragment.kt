@@ -6,6 +6,7 @@ import android.os.Bundle
 import android.view.Gravity
 import android.view.View
 import android.view.ViewGroup
+import android.widget.HorizontalScrollView
 import android.widget.LinearLayout
 import android.widget.TextView
 import androidx.fragment.app.Fragment
@@ -40,6 +41,8 @@ class CarHomeFragment : Fragment() {
     private lateinit var root: LinearLayout
     private lateinit var toolbar: LinearLayout
     private lateinit var dockBar: LinearLayout
+    private lateinit var toolbarScroll: HorizontalScrollView
+    private lateinit var dockScroll: HorizontalScrollView
     private lateinit var host: CardHostView
 
     private val scope: LauncherScope
@@ -57,22 +60,39 @@ class CarHomeFragment : Fragment() {
         savedInstanceState: Bundle?
     ): View {
         val ctx = requireContext()
-        root = LinearLayout(ctx).apply { orientation = LinearLayout.VERTICAL }
+        // 上游主题使用 translucent status + FLAG_LAYOUT_NO_LIMITS，内容从 y=0 开始；
+        // 主动给根布局留出状态栏高度，避免工具栏被挖孔/状态栏遮住。
+        val statusBarId = resources.getIdentifier("status_bar_height", "dimen", "android")
+        val statusBarHeight =
+            if (statusBarId > 0) resources.getDimensionPixelSize(statusBarId) else dp(24)
+        root = LinearLayout(ctx).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(0, statusBarHeight, 0, 0)
+        }
         toolbar = LinearLayout(ctx).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
             setPadding(dp(12), dp(6), dp(12), dp(6))
         }
-        host = CardHostView(ctx)
         dockBar = LinearLayout(ctx).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
             setPadding(dp(12), dp(6), dp(12), dp(10))
         }
+        // 小屏预览时按钮可能放不下，横滑而不是挤压或裁切。
+        toolbarScroll = HorizontalScrollView(ctx).apply {
+            isHorizontalScrollBarEnabled = false
+            addView(toolbar)
+        }
+        dockScroll = HorizontalScrollView(ctx).apply {
+            isHorizontalScrollBarEnabled = false
+            addView(dockBar)
+        }
+        host = CardHostView(ctx)
 
-        root.addView(toolbar, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(48)))
+        root.addView(toolbarScroll, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(48)))
         root.addView(host, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f))
-        root.addView(dockBar, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(64)))
+        root.addView(dockScroll, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(64)))
         return root
     }
 
@@ -101,6 +121,8 @@ class CarHomeFragment : Fragment() {
         )
 
         root.setBackgroundColor(theme.background)
+        toolbarScroll.setBackgroundColor(theme.background)
+        dockScroll.setBackgroundColor(theme.background)
         toolbar.setBackgroundColor(theme.background)
         dockBar.setBackgroundColor(theme.background)
 
@@ -127,7 +149,14 @@ class CarHomeFragment : Fragment() {
             text = "ddzm  ·  ${spec.label}  ·  ${cfg.themeMode.id}"
             textSize = 14f
             setTextColor(theme.muted)
-        }, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.MATCH_PARENT, 1f))
+            minWidth = dp(150)
+            maxLines = 1
+            ellipsize = android.text.TextUtils.TruncateAt.END
+            gravity = Gravity.CENTER_VERTICAL
+        }, LinearLayout.LayoutParams(
+            ViewGroup.LayoutParams.WRAP_CONTENT,
+            ViewGroup.LayoutParams.MATCH_PARENT
+        ))
 
         toolbar.addView(button("布局", theme) {
             configStore?.update {

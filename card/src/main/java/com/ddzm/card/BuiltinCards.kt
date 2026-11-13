@@ -2,6 +2,7 @@ package com.ddzm.card
 
 import android.content.Intent
 import android.graphics.Typeface
+import android.text.TextUtils
 import android.net.Uri
 import android.os.Handler
 import android.os.Looper
@@ -42,6 +43,8 @@ private fun label(ctx: CardContext, text: String, size: Float, bold: Boolean = f
         textSize = size
         setTextColor(ctx.palette.foreground)
         if (bold) typeface = Typeface.DEFAULT_BOLD
+        maxLines = 2
+        ellipsize = TextUtils.TruncateAt.END
     }
 
 private fun hint(ctx: CardContext, text: String): TextView =
@@ -49,6 +52,8 @@ private fun hint(ctx: CardContext, text: String): TextView =
         this.text = text
         textSize = 12f
         setTextColor(ctx.palette.muted)
+        maxLines = 3
+        ellipsize = TextUtils.TruncateAt.END
     }
 
 private fun column(ctx: CardContext, vararg children: View): LinearLayout =
@@ -83,8 +88,8 @@ private fun notificationSettings(ctx: CardContext) {
 
 class ClockCardFactory : CardFactory {
     override fun create(context: CardContext): CardView {
-        val clock = label(context, "--:--", 46f, true)
-        val date = hint(context, "")
+        val clock = label(context, "--:--", 26f, true).apply { maxLines = 1 }
+        val date = hint(context, "").apply { maxLines = 1 }
         val root = column(context, clock, date).apply { gravity = Gravity.CENTER }
         val handler = Handler(Looper.getMainLooper())
         val ticker = object : Runnable {
@@ -98,6 +103,12 @@ class ClockCardFactory : CardFactory {
         return SimpleCardView(
             root,
             bindBlock = { ctx ->
+                // 窄槽位（竖屏预览）用小字号，横屏车机放大，避免时钟被挤成多行。
+                clock.textSize = when {
+                    ctx.layoutContext.widthDp >= 900 -> 52f
+                    ctx.layoutContext.widthDp >= 600 -> 40f
+                    else -> 26f
+                }
                 clock.setTextColor(ctx.palette.foreground)
                 date.setTextColor(ctx.palette.muted)
                 handler.removeCallbacks(ticker)
@@ -146,7 +157,9 @@ class AppListCardFactory : CardFactory {
         for (app in apps) {
             list.addView(TextView(ctx.appContext).apply {
                 text = app.label
-                textSize = 15f
+                textSize = 14f
+                maxLines = 1
+                ellipsize = TextUtils.TruncateAt.END
                 setTextColor(ctx.palette.foreground)
                 setPadding(8, 14, 8, 14)
                 setOnClickListener { launch(ctx, app) }

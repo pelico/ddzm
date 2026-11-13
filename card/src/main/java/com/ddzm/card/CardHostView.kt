@@ -2,6 +2,7 @@ package com.ddzm.card
 
 import android.content.ClipData
 import android.content.Context
+import android.text.TextUtils
 import android.graphics.drawable.GradientDrawable
 import android.view.DragEvent
 import android.view.Gravity
@@ -160,6 +161,8 @@ class CardHostView(context: Context) : FrameLayout(context) {
             textSize = 12f
             setTextColor(theme.muted)
             gravity = Gravity.CENTER_VERTICAL
+            maxLines = 1
+            ellipsize = TextUtils.TruncateAt.END
             setPadding(dp(12), dp(4), dp(12), dp(4))
             setBackgroundColor(theme.background)
         }
