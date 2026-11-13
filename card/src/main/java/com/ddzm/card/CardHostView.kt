@@ -10,6 +10,7 @@ import android.view.View
 import android.view.ViewGroup
 import android.widget.FrameLayout
 import android.widget.LinearLayout
+import android.widget.ScrollView
 import android.widget.TextView
 import com.ddzm.core.LauncherScope
 import com.ddzm.core.card.CardContext
@@ -128,28 +129,31 @@ class CardHostView(context: Context) : FrameLayout(context) {
             }
         }
 
-        val body = FrameLayout(context)
-        if (card != null) {
+        // 矮槽位（手机横屏、带屏音箱）里内容不能硬裁：由渲染器统一提供可滚动容器，
+        // 卡片只负责提供内容，因此新增卡片无需各自处理尺寸。
+        val body = ScrollView(context).apply {
+            isFillViewport = true
+            isVerticalScrollBarEnabled = false
+        }
+        val content: View = if (card != null) {
             card.onBind(cardContext)
             attached += card
-            body.addView(
-                card.view,
-                FrameLayout.LayoutParams(
-                    ViewGroup.LayoutParams.MATCH_PARENT,
-                    ViewGroup.LayoutParams.MATCH_PARENT
-                )
-            )
+            card.view
         } else {
-            body.addView(TextView(context).apply {
+            TextView(context).apply {
                 text = "拖动卡片到这里"
                 textSize = 13f
                 setTextColor(theme.muted)
                 gravity = Gravity.CENTER
-            }, FrameLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT,
-                ViewGroup.LayoutParams.MATCH_PARENT
-            ))
+            }
         }
+        body.addView(
+            content,
+            FrameLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT
+            )
+        )
 
         frame.addView(body, FrameLayout.LayoutParams(
             ViewGroup.LayoutParams.MATCH_PARENT,

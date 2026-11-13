@@ -9,9 +9,7 @@ import android.os.Looper
 import android.provider.Settings
 import android.view.Gravity
 import android.view.View
-import android.view.ViewGroup
 import android.widget.LinearLayout
-import android.widget.ScrollView
 import android.widget.TextView
 import com.ddzm.core.Capability
 import com.ddzm.core.ServiceKeys
@@ -103,11 +101,12 @@ class ClockCardFactory : CardFactory {
         return SimpleCardView(
             root,
             bindBlock = { ctx ->
-                // 窄槽位（竖屏预览）用小字号，横屏车机放大，避免时钟被挤成多行。
+                // 按短边缩放：手机强制横屏时高度只有 ~370dp，只看宽度会把时钟撑爆。
+                val shortest = minOf(ctx.layoutContext.widthDp, ctx.layoutContext.heightDp)
                 clock.textSize = when {
-                    ctx.layoutContext.widthDp >= 900 -> 52f
-                    ctx.layoutContext.widthDp >= 600 -> 40f
-                    else -> 26f
+                    shortest >= 700 -> 52f
+                    shortest >= 500 -> 40f
+                    else -> 24f
                 }
                 clock.setTextColor(ctx.palette.foreground)
                 date.setTextColor(ctx.palette.muted)
@@ -136,14 +135,9 @@ class DateCardFactory : CardFactory {
 /** 应用列表卡片：直接走 core 的 AppCatalog 契约，不依赖 :appmodel 具体类型。 */
 class AppListCardFactory : CardFactory {
     override fun create(context: CardContext): CardView {
+        // 滚动由 CardHostView 的槽位容器统一提供，这里只产出内容，避免嵌套 ScrollView。
         val list = LinearLayout(context.appContext).apply { orientation = LinearLayout.VERTICAL }
-        val scroll = ScrollView(context.appContext).apply {
-            addView(list, ViewGroup.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT,
-                ViewGroup.LayoutParams.WRAP_CONTENT
-            ))
-        }
-        return SimpleCardView(scroll, bindBlock = { ctx -> bind(ctx, list) })
+        return SimpleCardView(list, bindBlock = { ctx -> bind(ctx, list) })
     }
 
     private fun bind(ctx: CardContext, list: LinearLayout) {

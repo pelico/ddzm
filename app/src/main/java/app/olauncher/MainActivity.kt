@@ -193,6 +193,9 @@ class MainActivity : AppCompatActivity() {
         // if (alreadyHome && isResumed && prefs.homeButtonShowRecents)
         //     viewModel.showRecentApps.call()
         super.onNewIntent(intent)
+        // singleTask 下 adb 预览不会重建 Activity；补一次重新路由，
+        // 否则已存在的手机桌面实例会忽略 ddzm_car_preview。
+        if (!carMode && CarModeRouter.useCarHome(this, intent)) recreate()
     }
 
     override fun onConfigurationChanged(newConfig: Configuration) {

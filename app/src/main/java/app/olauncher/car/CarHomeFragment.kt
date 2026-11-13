@@ -82,10 +82,12 @@ class CarHomeFragment : Fragment() {
         // 小屏预览时按钮可能放不下，横滑而不是挤压或裁切。
         toolbarScroll = HorizontalScrollView(ctx).apply {
             isHorizontalScrollBarEnabled = false
+            isFillViewport = true
             addView(toolbar)
         }
         dockScroll = HorizontalScrollView(ctx).apply {
             isHorizontalScrollBarEnabled = false
+            isFillViewport = true
             addView(dockBar)
         }
         host = CardHostView(ctx)
@@ -200,7 +202,8 @@ class CarHomeFragment : Fragment() {
             textSize = 13f
             setTextColor(theme.accent)
             gravity = Gravity.CENTER
-            setPadding(dp(16), dp(10), dp(16), dp(10))
+            minHeight = dp(36)
+            setPadding(dp(16), dp(8), dp(16), dp(8))
             background = GradientDrawable().apply {
                 cornerRadius = dp(10).toFloat()
                 setColor(theme.surface)
