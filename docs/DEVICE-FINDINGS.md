@@ -58,6 +58,11 @@ SingleLiveEvent 事件在 observer 注册前发出而丢失。
 让 L1 策略在权限缺失时自动降级到 L0。
 注意：手机上装的是手机版高德，氢桌面依赖的是**高德车机悬浮共存版**，需在真实车机设备验证。
 
+**已修复（P3 / P4）**：Manifest 已补 `SYSTEM_ALERT_WINDOW`，导航 / 快捷卡片加入
+`ACTION_MANAGE_OVERLAY_PERMISSION` 授权引导；`WindowCapabilityProbe` 用
+`Settings.canDrawOverlays()` 运行时探测，`CarHomeFragment.onResume` 每次返回桌面都重探能力，
+L1 权限缺失时自动降级到 L0。授权仍必须由用户在系统设置里确认，代码不能静默获得。
+
 ## 3. 系统分屏：修正 P1 的乐观判断
 
 `cmd activity supports-multiwindow=true`、`supports-split-screen=true`、`cmd activity help` 有
@@ -76,6 +81,11 @@ dumpsys: splitScreenState:0 （全部 20 处均为 0）
 即 ActivityRecord 记录了 windowingMode 数值，但 MagicOS 未执行分屏布局。
 **结论：L2 不能作为产品主路径，也不能仅凭 `supports-split-screen=true` 判定可用**，
 必须做运行时实际分屏验证并保留自动降级；P4 主力仍是 L1（第三方 App 自身悬浮窗 + 桌面自绘卡片）。
+
+**代码层修复（P4）**：`SplitScreenWindowStrategy` 增加 `SplitScreenVerifier`，命令返回 0
+之后必须再由 `dumpsys activity activities` 确认非零 `splitScreenState`；不通过则把目标 App
+全屏拉起、返回 Failed 并继续降级。默认 verifier 为 `SplitScreenVerifier.NEVER`，
+干净设备（无 Shizuku / adb）根本不尝试 L2。见 `docs/P4-CAPABILITIES.md`。
 
 ## 复现要点
 

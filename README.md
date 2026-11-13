@@ -52,10 +52,11 @@ Thank you!
 
 ```
 app        组装层：Application 引导、WindowHost 实现、原有 Olauncher UI（逐步迁移）
-  ├── card      内置卡片（时钟 / 应用 / 音乐 / 导航）与 CardHostView 渲染
-  ├── window    L0-L3 窗口策略、运行时能力探测、shell 桥接占位
+  ├── card      8 张内置卡片 + CardHostView 渲染器（三区 / 拖拽固定 / 昼夜主题）
+  ├── window    L0-L3 窗口策略、运行时能力探测、分屏运行时验证、shell 桥接占位
+  ├── media     NotificationListenerService + MediaSession 媒体状态源（P4）
   ├── appmodel  应用列表 / 启动 / 分类
-  ├── config    设备画像、主题、布局与卡片固定位置持久化
+  ├── config    设备画像、主题、6 套布局、Dock 与卡片固定位置持久化
   └── core      ★ 全部 SPI、注册表、布局引擎、能力模型、降级分发
 ```
 
@@ -97,18 +98,28 @@ scope.windows.register(FreeformWindowStrategy())
 
 | 级别 | 能力 | 状态 |
 |---|---|---|
-| L0 | 桌面内自绘卡片 + 快捷启动 | ✅ 全设备可用，降级终点 |
+| L0 | 桌面内自绘卡片 + 目标 App 全屏兜底 | ✅ 全设备可用，降级终点 |
 | L1 | 悬浮窗卡片 + 引导第三方 App 自身悬浮窗 | ✅ **主力路径**，实现「左音乐右导航」同屏 |
-| L2 | shell / Shizuku 触发系统分屏 | ⚠️ 条件增强：设备支持分屏，但普通 APK 无 shell 身份，仅在探测到桥接能力时启用，失败自动回退 |
+| L2 | shell / Shizuku 触发系统分屏 | ⚠️ 条件增强：P4 起强制运行时验证 `splitScreenState`，命令 exit 0 不算成功；不通过即全屏回退并继续降级 |
 | L3 | ActivityView / TaskView 真嵌入 | ❌ 无 root / 无系统签名不可达，仅保留 SPI |
 
 标准 Android 下普通 APK **无法**把第三方 App 的 Activity 并排嵌进自己的界面；L1 的做法是导航走地图 App 自身悬浮窗、音乐走桌面自绘卡片（媒体会话 / 通知监听），与氢桌面一致。`SYSTEM_ACTIVITY_EMBED` 能力在运行时探测中恒不授予。
 
 ### 构建
 
-沿用上游 Gradle 8.11.1 / AGP 8.9.1 / Kotlin 2.1.20 / JDK 17 / compileSdk 36。P2 阶段仅建立骨架，**尚未在本机编译验证**（本机未安装 JDK 与 Android SDK，计划于 P5 统一安装并回归）。结构自检可随时运行：
+沿用上游 Gradle 8.11.1 / AGP 8.9.1 / Kotlin 2.1.20 / JDK 17 / compileSdk 36。本机不装 JDK / Android SDK，编译与出包全部交给 GitHub Actions（`.github/workflows/android-ci.yml`）：结构自检 → 全模块 `testDebugUnitTest` → `assembleDebug` → 上传 `ddzm-debug-apk`。本机用 `platform-tools/adb.exe` 下载 artifact 并安装到已配对无线调试的真机做冒烟，见 `scripts/device-smoke.mjs`。
+
+结构自检不依赖任何工具链，可随时运行：
 
 ```
 node scripts/verify-structure.mjs
 ```
+
+### P4：媒体卡片与窗口能力分级
+
+- 音乐卡片不再占位：新增 `:media` 模块，`MediaNotificationService` 读取 `MediaSession` 的曲目 / 播放状态，卡片提供播放、暂停、上一首、下一首与打开播放器；未授予「通知使用权」时服务不绑定，卡片自动显示授权引导。契约在 `core/contract/Contracts.kt`，`:media` 与 `:card` 互不依赖。
+- 导航卡片的启动动作改走 `Framework.dispatch`：L2 → L1 → L0 依运行时能力自动降级，并把实际落在哪一级显示出来；L0 兜底也会把地图 App 全屏拉起，不会出现「点了没反应」。
+- L2 增加 `SplitScreenVerifier`：默认 `NEVER`，即干净设备不依赖 Shizuku / adb；只有外部注入真实 verifier 且 `dumpsys` 明确显示非零 `splitScreenState` 才算成功。依据见 `docs/DEVICE-FINDINGS.md`。
+- Dock 应用可自定义：工具条「固定 Dock」多选应用写入 `ConfigStore.dockPackages`，长按 Dock 按钮取消固定。
+- 详细实现与验收清单见 `docs/P4-CAPABILITIES.md`。
 

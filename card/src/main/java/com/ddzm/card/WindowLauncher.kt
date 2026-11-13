@@ -16,9 +16,31 @@ import com.ddzm.core.window.WindowResult
  * L2 系统分屏 → L1 悬浮共存 → L0 桌面卡片 + 全屏启动。
  * 这正是「同一份代码在车机 / 平板 / 手机上自动降级」的落点。
  */
+/**
+ * 进程内记录最近一次窗口调度结果。
+ *
+ * CarHomeFragment 每次 onResume 都会 render()，卡片 View 随之重建；若把结果
+ * 只存在卡片字段里，启动地图再返回桌面后就看不到降级到了哪一级。
+ */
+internal object WindowDispatchLog {
+    @Volatile
+    var last: String = ""
+        private set
+
+    fun record(text: String) {
+        last = text
+    }
+}
+
 internal object WindowLauncher {
 
     fun dispatch(ctx: CardContext, request: WindowRequest): WindowResult {
+        val result = doDispatch(ctx, request)
+        WindowDispatchLog.record(result.describe())
+        return result
+    }
+
+    private fun doDispatch(ctx: CardContext, request: WindowRequest): WindowResult {
         val scope: LauncherScope? = ctx.services.find(ServiceKeys.LAUNCHER_SCOPE)
         val host: WindowHost? = ctx.services.find(ServiceKeys.WINDOW_HOST)
 

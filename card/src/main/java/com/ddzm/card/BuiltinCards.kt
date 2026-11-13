@@ -185,23 +185,33 @@ class MusicCardFactory : CardFactory {
     override fun create(context: CardContext): CardView {
         val source: MediaStateSource? = context.services.find(ServiceKeys.MEDIA_STATE)
         val title = label(context, "音乐", 17f, true).apply { maxLines = 1 }
-        val track = label(context, "暂无播放信息", 16f, true).apply { maxLines = 1 }
+        val track = label(context, "暂无播放", 16f, true).apply { maxLines = 1 }
         val artist = hint(context, "").apply { maxLines = 1 }
         val extra = hint(context, "").apply { maxLines = 1 }
         val grant = action(context, "开启通知监听") { notificationSettings(it) }
         val open = action(context, "打开播放器") { ctx -> openPlayer(ctx, source) }
 
+        // 竖屏手机预览时右侧区域只有 ~120dp，横排三按钮会被挤成竖排单字。
+        // 窄屏改竖排 + 整行宽度，车机 / 平板横屏仍保持横排。
+        val narrow = context.layoutContext.widthDp in 1..599
         val controls = LinearLayout(context.appContext).apply {
-            orientation = LinearLayout.HORIZONTAL
+            orientation = if (narrow) LinearLayout.VERTICAL else LinearLayout.HORIZONTAL
         }
         val previous = action(context, "上一首") { control(source) { previous() } }
         val toggle = action(context, "播放 / 暂停") { togglePlay(source) }
         val next = action(context, "下一首") { control(source) { next() } }
         for (button in listOf(previous, toggle, next)) {
-            controls.addView(
-                button,
+            button.maxLines = 1
+            button.ellipsize = TextUtils.TruncateAt.END
+            val params = if (narrow) {
+                LinearLayout.LayoutParams(
+                    ViewGroup.LayoutParams.MATCH_PARENT,
+                    ViewGroup.LayoutParams.WRAP_CONTENT
+                )
+            } else {
                 LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f)
-            )
+            }
+            controls.addView(button, params)
         }
 
         val root = column(context, title, track, artist, extra, controls, open, grant)
@@ -209,17 +219,17 @@ class MusicCardFactory : CardFactory {
 
         fun applySnapshot(snapshot: MediaSnapshot, granted: Boolean) {
             track.text = if (snapshot.hasTrack) snapshot.title.ifBlank { "未知曲目" }
-            else "暂无播放信息"
+            else "暂无播放"
             artist.text = when {
-                !granted -> "需要「通知使用权」才能读取播放信息"
-                !snapshot.sessionActive -> "已授权 · 等待播放器建立会话"
+                !granted -> "需开启通知使用权"
+                !snapshot.sessionActive -> "等待播放器会话"
                 snapshot.artist.isBlank() -> playStateText(snapshot.isPlaying)
                 else -> snapshot.artist + " · " + playStateText(snapshot.isPlaying)
             }
             extra.text = when {
                 snapshot.album.isNotBlank() -> snapshot.album
                 snapshot.packageName.isNotBlank() -> "来源 " + snapshot.packageName
-                else -> "桌面自绘卡片 · MediaSession"
+                else -> "MediaSession · 桌面自绘"
             }
             toggle.text = if (snapshot.isPlaying) "暂停" else "播放"
             val usable = snapshot.sessionActive
@@ -295,13 +305,18 @@ class NavCardFactory : CardFactory {
     override fun create(context: CardContext): CardView {
         val title = label(context, "导航 / 主内容区", 20f, true)
         val status = hint(context, "地图画面由地图 App 的悬浮窗提供（氢桌面路线）")
-        val dispatchInfo = hint(context, "尚未启动地图").apply { maxLines = 3 }
+        val dispatchInfo = hint(
+            context,
+            WindowDispatchLog.last.ifBlank { "尚未启动地图" }
+        ).apply { maxLines = 3 }
         val overlay = action(context, "开启悬浮窗权限") { overlaySettings(it) }
         val map = action(context, "启动地图应用") { ctx -> launchMap(ctx, dispatchInfo) }
         return SimpleCardView(column(context, title, status, dispatchInfo, overlay, map)) { ctx ->
             val granted = ctx.layoutContext.capabilities.has(Capability.OVERLAY_WINDOW)
             overlay.text = if (granted) "悬浮窗已授权 · 可引导地图 App 开启悬浮共存"
             else "开启悬浮窗权限（车机地图悬浮共存前置）"
+            // 卡片重建后从进程内日志恢复最近一次降级结果。
+            dispatchInfo.text = WindowDispatchLog.last.ifBlank { "尚未启动地图" }
             title.setTextColor(ctx.palette.foreground)
             status.setTextColor(ctx.palette.muted)
             dispatchInfo.setTextColor(ctx.palette.muted)
@@ -378,13 +393,19 @@ class StatusCardFactory : CardFactory {
             val c = ctx.layoutContext
             val media: MediaStateSource? = ctx.services.find(ServiceKeys.MEDIA_STATE)
             val level = when {
-                c.capabilities.has(Capability.SHELL_SPLIT_SCREEN) -> "L2 可用（仍需运行时验证）"
-                c.capabilities.has(Capability.OVERLAY_WINDOW) -> "L1 悬浮可用"
-                else -> "L0 桌面卡片"
+                c.capabilities.has(Capability.SHELL_SPLIT_SCREEN) -> "L2 待验证"
+                c.capabilities.has(Capability.OVERLAY_WINDOW) -> "L1 悬浮"
+                else -> "L0 卡片"
             }
-            status.text = "画像=${c.deviceClass} 横屏=${c.isLandscape} " +
-                "${c.widthDp}x${c.heightDp}dp\n" +
-                "能力=${c.capabilities.granted}\n" +
+            fun mark(cap: Capability): String =
+                if (c.capabilities.has(cap)) "Y" else "N"
+            // 窄槽位里列完整枚举会碎成多行，改成紧凑的能力位图。
+            status.text = "画像=${c.deviceClass} ${c.widthDp}x${c.heightDp}dp " +
+                "${if (c.isLandscape) "横" else "竖"}\n" +
+                "悬浮=${mark(Capability.OVERLAY_WINDOW)} " +
+                "通知=${mark(Capability.NOTIFICATION_LISTENER)} " +
+                "分屏=${mark(Capability.SHELL_SPLIT_SCREEN)} " +
+                "HOME=${mark(Capability.ROLE_HOME)}\n" +
                 "窗口=$level\n" +
                 "媒体=${if (media?.current()?.sessionActive == true) "有会话" else "无会话"}"
             title.setTextColor(ctx.palette.foreground)
