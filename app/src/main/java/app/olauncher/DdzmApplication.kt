@@ -28,13 +28,15 @@ class DdzmApplication : Application() {
     lateinit var scope: LauncherScope
         private set
 
+    private lateinit var capabilityProbe: WindowCapabilityProbe
+
     override fun onCreate() {
         super.onCreate()
 
         val shell = NoopShellExecutor()
-        val probe = WindowCapabilityProbe(this, shell)
+        capabilityProbe = WindowCapabilityProbe(this, shell)
         val configStore = SharedPrefsConfigStore(this)
-        val newScope = Framework.newScope(probe.probe())
+        val newScope = Framework.newScope(capabilityProbe.probe())
         scope = newScope
 
         newScope.layouts.register(Framework.DEFAULT_LAYOUT_ENGINE, DefaultLayoutEngine())
@@ -43,7 +45,7 @@ class DdzmApplication : Application() {
         val plugins = listOf(
             ConfigPlugin(configStore),
             AppModelPlugin(PackageManagerAppRepository(this)),
-            WindowModule(probe, shell),
+            WindowModule(capabilityProbe, shell),
             CardModule()
         )
         val installed = plugins.map { plugin -> plugin.id to newScope.install(plugin) }
@@ -69,6 +71,10 @@ class DdzmApplication : Application() {
                 "device=${newScope.layoutContext().deviceClass}, plugins=$installed"
         )
     }
+
+    /** 从设置页返回桌面时重探能力：悬浮窗授权、通知监听、Shizuku 失效都要立即反映到卡片。 */
+    fun refreshCapabilities(): com.ddzm.core.CapabilitySnapshot =
+        scope.refreshCapabilities(capabilityProbe)
 
     companion object {
         private const val TAG = "ddzm"

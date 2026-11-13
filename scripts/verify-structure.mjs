@@ -69,6 +69,7 @@ for (const mod of modules) detectCycle(mod, []);
 const appFrameworkFiles = [
   'app/src/main/java/app/olauncher/DdzmApplication.kt',
   'app/src/main/java/app/olauncher/AndroidWindowHost.kt',
+  ...walk('app/src/main/java/app/olauncher/car'),
 ].filter(exists);
 const ktFiles = walk('core')
   .concat(walk('config'), walk('appmodel'), walk('window'), walk('card'), appFrameworkFiles)
@@ -133,8 +134,16 @@ if (exists('app/src/main/AndroidManifest.xml')) {
   if (!manifest.includes('android:name=".DdzmApplication"')) {
     errors.push('Manifest: DdzmApplication not registered');
   }
-} else {
-  errors.push('Manifest: app/src/main/AndroidManifest.xml missing');
+  // 真机实测发现基线漏声明，L1 悬浮能力因此完全不可授权。
+  if (!manifest.includes('android.permission.SYSTEM_ALERT_WINDOW')) {
+    errors.push('Manifest: SYSTEM_ALERT_WINDOW missing (L1 overlay capability)');
+  }
+}
+if (!exists('app/src/main/res/navigation/nav_graph_car.xml')) {
+  errors.push('Navigation: car home graph missing');
+}
+if (!exists('app/src/main/res/values-sw600dp/bools.xml')) {
+  errors.push('Resources: large-screen qualifier values-sw600dp missing');
 }
 
 // ---- 输出 ----

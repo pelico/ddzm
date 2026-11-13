@@ -31,11 +31,41 @@ interface CardView {
     fun onDetach()
 }
 
+/**
+ * 卡片配色。只用 Int 颜色值，避免在 core 里调用 Android 图形 API，
+ * 保证 core 的纯 JVM 单测不受影响。由 :config / :app 决定明暗，卡片只消费。
+ */
+data class CardTheme(
+    val background: Int,
+    val surface: Int,
+    val foreground: Int,
+    val muted: Int,
+    val accent: Int
+) {
+    companion object {
+        val DARK = CardTheme(
+            background = 0xFF0B1016.toInt(),
+            surface = 0xFF18222E.toInt(),
+            foreground = 0xFFF2F6FB.toInt(),
+            muted = 0xFF93A4B8.toInt(),
+            accent = 0xFF4FC3F7.toInt()
+        )
+        val LIGHT = CardTheme(
+            background = 0xFFEDF2F7.toInt(),
+            surface = 0xFFFFFFFF.toInt(),
+            foreground = 0xFF14202C.toInt(),
+            muted = 0xFF607488.toInt(),
+            accent = 0xFF0277BD.toInt()
+        )
+    }
+}
+
 data class CardContext(
     val appContext: Context,
     val slot: SlotSpec,
     val layoutContext: LayoutContext,
-    val services: ServiceRegistry
+    val services: ServiceRegistry,
+    val theme: CardTheme = CardTheme.DARK
 )
 
 fun interface CardFactory {

@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  车机 / 大屏导航图。与手机用的 nav_graph.xml 共用 MainActivity，
+  CarModeRouter 判定为大屏时通过 NavController.setGraph 换图，
+  因此系统里始终只有一个 HOME Activity，不会出现桌面选择弹框。
+-->
+<navigation xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:id="@+id/nav_graph_car"
+    app:startDestination="@id/carHomeFragment">
+
+    <fragment
+        android:id="@+id/carHomeFragment"
+        android:name="app.olauncher.car.CarHomeFragment"
+        android:label="car_home" />
+
+    <fragment
+        android:id="@+id/appListFragment"
+        android:name="app.olauncher.ui.AppDrawerFragment"
+        android:label="app_list_fragment">
+        <action
+            android:id="@+id/action_appListFragment_to_settingsFragment2"
+            app:destination="@id/settingsFragment"
+            app:enterAnim="@anim/fade_enter"
+            app:exitAnim="@anim/fade_exit"
+            app:popEnterAnim="@anim/fade_enter"
+            app:popExitAnim="@anim/fade_exit"
+            app:popUpTo="@id/appListFragment"
+            app:popUpToInclusive="true" />
+    </fragment>
+
+    <fragment
+        android:id="@+id/settingsFragment"
+        android:name="app.olauncher.ui.SettingsFragment"
+        android:label="SettingsFragment">
+        <action
+            android:id="@+id/action_settingsFragment_to_appListFragment"
+            app:destination="@id/appListFragment" />
+    </fragment>
+
+</navigation>

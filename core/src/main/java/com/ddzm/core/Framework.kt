@@ -1,5 +1,6 @@
 package com.ddzm.core
 
+import com.ddzm.core.layout.LayoutContext
 import com.ddzm.core.layout.LayoutPlan
 import com.ddzm.core.layout.LayoutSpec
 import com.ddzm.core.window.WindowHost
@@ -37,14 +38,20 @@ object Framework {
     fun newScope(capabilities: CapabilitySnapshot = CapabilitySnapshot.EMPTY): LauncherScope =
         LauncherScope(capabilities = capabilities)
 
-    /** 按当前能力快照解析布局，返回每个槽位绑定的卡片 id（可能为空）。 */
+    /**
+     * 按当前能力快照解析布局，返回每个槽位绑定的卡片 id（可能为空）。
+     *
+     * [contextOverride] 用于「预览某种设备布局」「设置里强制设备画像」等场景：
+     * 渲染逻辑不变，只替换设备上下文；不传时仍走 [LauncherScope.layoutContext]。
+     */
     fun resolveLayout(
         scope: LauncherScope,
         spec: LayoutSpec,
-        engineId: String = DEFAULT_LAYOUT_ENGINE
+        engineId: String = DEFAULT_LAYOUT_ENGINE,
+        contextOverride: LayoutContext? = null
     ): LayoutPlan {
         val engine = scope.layouts.require(engineId)
-        val context = scope.layoutContext()
+        val context = contextOverride ?: scope.layoutContext()
         return engine.resolve(spec, scope.cards.available(context), context)
     }
 

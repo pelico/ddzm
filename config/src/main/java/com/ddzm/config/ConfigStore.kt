@@ -31,15 +31,23 @@ class SharedPrefsConfigStore(private val appContext: Context) : ConfigStore {
             .toMap()
 
         val overrideId = prefs.getString(KEY_DEVICE_OVERRIDE, null)
+        val dock = prefs.getString(KEY_DOCK_PACKAGES, "").orEmpty()
+            .split(LIST_SEPARATOR)
+            .map { it.trim() }
+            .filter { it.isNotBlank() }
 
         return LauncherConfig(
             themeMode = ThemeMode.fromId(
                 prefs.getString(KEY_THEME_MODE, ThemeMode.SYSTEM.id) ?: ThemeMode.SYSTEM.id
             ),
+            homeMode = HomeMode.fromId(
+                prefs.getString(KEY_HOME_MODE, HomeMode.AUTO.id) ?: HomeMode.AUTO.id
+            ),
             activeLayoutId = prefs.getString(KEY_ACTIVE_LAYOUT, LauncherConfig.DEFAULT_LAYOUT_ID)
                 ?: LauncherConfig.DEFAULT_LAYOUT_ID,
             deviceOverride = overrideId?.let { DeviceClass.fromId(it) },
             pinnedCards = pinnedCards,
+            dockPackages = dock,
             overlayGuidanceShown = prefs.getBoolean(KEY_OVERLAY_HINT, false),
             splitScreenHintShown = prefs.getBoolean(KEY_SPLIT_HINT, false)
         )
@@ -48,6 +56,7 @@ class SharedPrefsConfigStore(private val appContext: Context) : ConfigStore {
     override fun save(config: LauncherConfig) {
         prefs.edit()
             .putString(KEY_THEME_MODE, config.themeMode.id)
+            .putString(KEY_HOME_MODE, config.homeMode.id)
             .putString(KEY_ACTIVE_LAYOUT, config.activeLayoutId)
             .putString(KEY_DEVICE_OVERRIDE, config.deviceOverride?.id)
             .putString(
@@ -56,6 +65,7 @@ class SharedPrefsConfigStore(private val appContext: Context) : ConfigStore {
                     "${it.key}$KEY_VALUE_SEPARATOR${it.value}"
                 }
             )
+            .putString(KEY_DOCK_PACKAGES, config.dockPackages.joinToString(LIST_SEPARATOR))
             .putBoolean(KEY_OVERLAY_HINT, config.overlayGuidanceShown)
             .putBoolean(KEY_SPLIT_HINT, config.splitScreenHintShown)
             .apply()
@@ -82,12 +92,15 @@ class SharedPrefsConfigStore(private val appContext: Context) : ConfigStore {
     private companion object {
         const val PREFS_NAME = "ddzm_config"
         const val KEY_THEME_MODE = "theme_mode"
+        const val KEY_HOME_MODE = "home_mode"
         const val KEY_ACTIVE_LAYOUT = "active_layout"
         const val KEY_DEVICE_OVERRIDE = "device_override"
         const val KEY_PINNED_CARDS = "pinned_cards"
+        const val KEY_DOCK_PACKAGES = "dock_packages"
         const val KEY_OVERLAY_HINT = "overlay_hint"
         const val KEY_SPLIT_HINT = "split_hint"
         const val ENTRY_SEPARATOR = ";"
         const val KEY_VALUE_SEPARATOR = "="
+        const val LIST_SEPARATOR = ","
     }
 }

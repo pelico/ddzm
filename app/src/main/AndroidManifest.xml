@@ -17,6 +17,12 @@
         tools:ignore="ProtectedPermissions" />
     <!--Used for Private Space support on Android 15+-->
     <uses-permission android:name="android.permission.ACCESS_HIDDEN_PROFILES" />
+    <!--
+      L1 悬浮卡片与「引导地图 App 悬浮共存」的前置声明。
+      真机实测（docs/DEVICE-FINDINGS.md）发现基线未声明该权限，
+      cmd appops set 因此完全无法授权；权限仍需用户在系统设置里显式授予。
+    -->
+    <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
 
     <application
         android:name=".DdzmApplication"

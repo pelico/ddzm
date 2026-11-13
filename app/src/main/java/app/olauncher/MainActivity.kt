@@ -21,6 +21,7 @@ import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.lifecycleScope
 import androidx.navigation.NavController
 import androidx.navigation.findNavController
+import app.olauncher.car.CarModeRouter
 import app.olauncher.data.Constants
 import app.olauncher.data.Prefs
 import app.olauncher.databinding.ActivityMainBinding
@@ -60,6 +61,7 @@ class MainActivity : AppCompatActivity() {
     private var profileReceiver: BroadcastReceiver? = null
     private var launcherAppsCallback: LauncherApps.Callback? = null
     private var messageDialog: OlDialog? = null
+    private var carMode = false
 
 //    override fun onBackPressed() {
 //        if (navController.currentDestination?.id != R.id.mainFragment)
@@ -86,24 +88,31 @@ class MainActivity : AppCompatActivity() {
         navController = this.findNavController(R.id.nav_host_fragment)
         viewModel = ViewModelProvider(this)[MainViewModel::class.java]
 
+        // 大屏 / 车机换用三区导航图；竖屏手机保持上游 nav_graph 原样。
+        carMode = CarModeRouter.useCarHome(this, intent)
+        if (carMode) navController.setGraph(R.navigation.nav_graph_car)
+
         val onBackPressedCallback = object : OnBackPressedCallback(true) {
             override fun handleOnBackPressed() {
                 // Back never leaves the home screen; elsewhere it pops the nav stack
-                if (navController.currentDestination?.id != R.id.mainFragment)
+                if (navController.currentDestination?.id != navController.graph.startDestinationId)
                     navController.popBackStack()
             }
         }
         onBackPressedDispatcher.addCallback(this, onBackPressedCallback)
 
+        var requestDefaultLauncher = false
         if (prefs.firstOpen) {
             viewModel.firstOpen(true)
             prefs.firstOpen = false
             prefs.firstOpenTime = System.currentTimeMillis()
             viewModel.setDefaultClockApp()
-            viewModel.resetLauncherLiveData.call()
+            requestDefaultLauncher = true
         }
 
         initObservers(viewModel)
+        // SingleLiveEvent 必须先注册观察者再 call，否则首次启动的默认桌面申请事件会丢失。
+        if (requestDefaultLauncher) viewModel.resetLauncherLiveData.call()
         viewModel.getAppList()
         registerShortcutCallback()
         setupOrientation()
@@ -337,7 +346,7 @@ class MainActivity : AppCompatActivity() {
 
     @SuppressLint("SourceLockedOrientationActivity")
     private fun setupOrientation() {
-        if (isTablet(this) || Build.VERSION.SDK_INT == Build.VERSION_CODES.O)
+        if (carMode || isTablet(this) || Build.VERSION.SDK_INT == Build.VERSION_CODES.O)
             return
         // In Android 8.0, windowIsTranslucent cannot be used with screenOrientation=portrait
         requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_PORTRAIT
@@ -346,8 +355,9 @@ class MainActivity : AppCompatActivity() {
     private fun backToHomeScreen() {
         if (viewModel.isPrivateSpaceToggling) return
         messageDialog?.dismiss()
-        if (navController.currentDestination?.id != R.id.mainFragment)
-            navController.popBackStack(R.id.mainFragment, false)
+        val homeId = navController.graph.startDestinationId
+        if (navController.currentDestination?.id != homeId)
+            navController.popBackStack(homeId, false)
     }
 
     private fun setPlainWallpaper() {
