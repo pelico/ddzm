@@ -78,15 +78,18 @@ preferredLevel = L2_SPLIT_SCREEN
 
 ## 3. 真机验收清单
 
-| 场景 | 可在现有设备验证 | 说明 |
+| 场景 | 可在现有设备验证 | 实测证据 |
 |---|---|---|
-| 编译 / 全模块 JVM 单测 / 出包 | ✅ | GitHub Actions `android-ci.yml` |
-| 三区界面 / 6 布局 / 昼夜 / 拖拽固定 | ✅ | 荣耀 X50 GT + adb 预览 flag |
-| 音乐卡片显示授权引导 | ✅ | 未授权通知使用权时 |
-| 音乐卡片显示真实曲目 + 播放控制 | ✅（需授权 + 装播放器） | 授权「通知使用权」后播放任意音乐 |
-| 悬浮窗权限授权 → 能力刷新 | ✅ | Manifest 已声明 `SYSTEM_ALERT_WINDOW` |
-| Dock 固定 / 长按取消 | ✅ | 工具条「固定 Dock」 |
-| 导航按钮降级链显示 | ✅ | 无悬浮权限时应落到 L0 + 全屏启动 |
+| 编译 / 全模块 JVM 单测 / 出包 | ✅ | CI `43405388588`(3863b2b)、`43407253310`(73b2442) 均 success；新增 `media`/`window` 共 12 个 JVM 单测 |
+| 三区界面 / 工具条 / Dock | ✅ | 横屏截图：布局 / 昼夜 / 手机桌面 / 固定 Dock / 全部应用 全部可见 |
+| 音乐卡片未授权引导 | ✅ | 未授权时显示「需开启通知使用权」+「开启通知监听」入口 |
+| 通知监听服务绑定 | ✅ | `cmd notification allow_listener` 后 `dumpsys activity services` 出现 `ServiceRecord{...MediaNotificationService}`，`settings get secure enabled_notification_listeners` 含本包组件 |
+| 真实 MediaSession 发现 | ✅ | `dumpsys media_session` 显示 `com.hihonor.cloudmusic active=true`；音乐卡片显示「已暂停」、状态卡片显示「媒体=有会话」 |
+| 悬浮窗权限 → 能力刷新 | ✅ | `dumpsys package` 显示 `SYSTEM_ALERT_WINDOW: granted=true`，状态卡片「窗口=L1 悬浮可用」 |
+| 导航按钮降级链 | ✅ | 点击「启动地图应用」后前台切到 `com.autonavi.minimap/com.autonavi.map.activity.NewMapActivity` |
+| Dock 固定弹窗 | ✅ | 点击「固定 Dock」弹出多选列表（Authenticator / Chrome / SIM 卡应用1…）+ 保存 / 取消 |
+| 无崩溃 | ✅ | 全程 logcat 无 `FATAL EXCEPTION` |
+| 音乐卡片显示真实曲目 | ⚠️ 需手动播放 | 已建立会话但设备当前无曲目 metadata；手动播放一首歌即可看到标题 / 歌手 |
 | **左音乐右导航同屏** | ❌ 需目标设备 | 需真实车机 / 平板 + **高德车机悬浮共存版**；手机版高德不画悬浮共存窗 |
 | **L2 真实系统分屏** | ❌ 需 Shizuku + 兼容设备 | 默认不启用；需注入 `splitCommand` 与 verifier |
 | **默认桌面 / HOME role** | ❌ 需 AOSP 类设备 | 荣耀 OEM 锁死，见 `DEVICE-FINDINGS.md` 第 1 节 |
