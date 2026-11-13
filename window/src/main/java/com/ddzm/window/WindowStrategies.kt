@@ -21,11 +21,20 @@ class InCardWindowStrategy : WindowStrategy {
 
     override fun launch(request: WindowRequest, host: WindowHost): WindowResult {
         val cardId = request.cardId ?: return WindowResult.Failed("no cardId for L0")
-        return if (host.showInCard(cardId)) {
-            WindowResult.Handled(WindowLevel.L0_IN_CARD, id, "shown in card: $cardId")
-        } else {
-            WindowResult.Failed("host refused in-card display")
+        if (!host.showInCard(cardId)) {
+            return WindowResult.Failed("card not registered: $cardId")
         }
+        // P4：L0 是永远可用的终点。目标 App 仍要能打开（全屏兜底），
+        // 否则「启动地图」在悬浮权限缺失时会变成什么都没发生。
+        val target = request.targetPackage
+        if (target != null) {
+            val started = host.startApp(target, request.targetActivity)
+            return WindowResult.Handled(
+                WindowLevel.L0_IN_CARD, id,
+                "card kept; full-screen fallback started=$started ($target)"
+            )
+        }
+        return WindowResult.Handled(WindowLevel.L0_IN_CARD, id, "shown in card: $cardId")
     }
 }
 
@@ -57,12 +66,18 @@ class OverlayWindowStrategy : WindowStrategy {
 }
 
 /**
- * L2（条件增强）：shell 身份下触发系统分屏。P2 只搭接口与降级链，
- * 具体命令由 [SplitScreenCommand] 在 P4 注入；未注入时本策略恒不接管。
+ * L2（条件增强）：shell 身份下触发系统分屏。
+ *
+ * P4 修正：命令执行成功 ≠ 真的分屏。执行后必须再跑一次 [SplitScreenVerifier]
+ * 做运行时验证；不通过就强制把目标 App 全屏拉起并返回 Failed，
+ * 由 Framework.dispatch 继续降级到 L1 / L0。默认 verifier 为 NEVER，
+ * 因此干净设备（无 Shizuku / adb）根本不会假装分屏成功。
  */
 class SplitScreenWindowStrategy(
     private val shell: ShellExecutor,
-    private val command: SplitScreenCommand = SplitScreenCommand { null }
+    private val command: SplitScreenCommand = SplitScreenCommand { null },
+    private val verifier: SplitScreenVerifier = SplitScreenVerifier.NEVER,
+    private val verifyCommand: String = SPLIT_SCREEN_VERIFY_COMMAND
 ) : WindowStrategy {
     override val id: String = "window.split_screen"
     override val level: WindowLevel = WindowLevel.L2_SPLIT_SCREEN
@@ -81,11 +96,24 @@ class SplitScreenWindowStrategy(
             return WindowResult.Failed("device has no split-screen support")
         }
         val result = shell.execute(cmd)
-        return if (result.exitCode == 0) {
-            WindowResult.Handled(WindowLevel.L2_SPLIT_SCREEN, id, result.output)
-        } else {
-            WindowResult.Failed("shell returned ${result.exitCode}: ${result.output}")
+        if (result.exitCode != 0) {
+            return WindowResult.Failed("shell returned ${result.exitCode}: ${result.output}")
         }
+        val verification = shell.execute(verifyCommand)
+        if (!verifier.verified(verification.output)) {
+            // 关键兜底：OEM 可能吞掉 --windowingMode，必须退回全屏启动，
+            // 并继续走降级链，绝不能把「命令返回 0」当成 Handled。
+            val target = request.targetPackage
+            if (target != null) host.startApp(target, request.targetActivity)
+            return WindowResult.Failed(
+                "split-screen NOT verified at runtime (exit 0 only); " +
+                    "forced full-screen fallback; see docs/DEVICE-FINDINGS.md"
+            )
+        }
+        return WindowResult.Handled(
+            WindowLevel.L2_SPLIT_SCREEN, id,
+            "verified: " + verification.output.take(160)
+        )
     }
 }
 

@@ -9,6 +9,7 @@ import android.view.ViewGroup
 import android.widget.HorizontalScrollView
 import android.widget.LinearLayout
 import android.widget.TextView
+import androidx.appcompat.app.AlertDialog
 import androidx.fragment.app.Fragment
 import androidx.navigation.fragment.findNavController
 import app.olauncher.DdzmApplication
@@ -179,7 +180,35 @@ class CarHomeFragment : Fragment() {
             configStore?.update { it.copy(homeMode = HomeMode.PHONE) }
             requireActivity().recreate()
         })
+        toolbar.addView(button("固定 Dock", theme) { showDockPicker(cfg) })
         toolbar.addView(button("全部应用", theme) { openAppDrawer() })
+    }
+
+    /**
+     * P4：Dock 应用自定义。多选结果写入 ConfigStore.dockPackages，
+     * 与卡片拖拽固定走同一套持久化；不引入数据库或新页面。
+     */
+    private fun showDockPicker(cfg: LauncherConfig) {
+        val catalog: AppCatalog? = scope.services.find(ServiceKeys.APP_CATALOG)
+        val apps = catalog?.list().orEmpty()
+        if (apps.isEmpty()) return
+        val labels = apps.map { it.label }.toTypedArray()
+        val checked = BooleanArray(apps.size) { index ->
+            apps[index].packageName in cfg.dockPackages
+        }
+        AlertDialog.Builder(requireContext())
+            .setTitle("固定到底部 Dock（长按 Dock 按钮取消）")
+            .setMultiChoiceItems(labels, checked) { _, which, isChecked ->
+                checked[which] = isChecked
+            }
+            .setPositiveButton("保存") { _, _ ->
+                val selected = apps.filterIndexed { index, _ -> checked[index] }
+                    .map { it.packageName }
+                configStore?.update { it.copy(dockPackages = selected) }
+                render()
+            }
+            .setNegativeButton("取消", null)
+            .show()
     }
 
     private fun renderDock(cfg: LauncherConfig, theme: CardTheme) {
@@ -191,7 +220,17 @@ class CarHomeFragment : Fragment() {
         val shown = (pinned + auto).distinctBy { it.packageName }.take(7)
 
         for (app in shown) {
-            dockBar.addView(dockButton(app.label, theme) { launch(app.packageName) })
+            val view = dockButton(app.label, theme) { launch(app.packageName) }
+            if (app.packageName in cfg.dockPackages) {
+                view.setOnLongClickListener {
+                    configStore?.update {
+                        it.copy(dockPackages = it.dockPackages - app.packageName)
+                    }
+                    render()
+                    true
+                }
+            }
+            dockBar.addView(view)
         }
         dockBar.addView(dockButton("全部应用", theme) { openAppDrawer() })
     }

@@ -72,7 +72,7 @@ const appFrameworkFiles = [
   ...walk('app/src/main/java/app/olauncher/car'),
 ].filter(exists);
 const ktFiles = walk('core')
-  .concat(walk('config'), walk('appmodel'), walk('window'), walk('card'), appFrameworkFiles)
+  .concat(walk('config'), walk('appmodel'), walk('window'), walk('card'), walk('media'), appFrameworkFiles)
   .filter((f, i, arr) => arr.indexOf(f) === i);
 
 const declarations = new Set();
@@ -137,6 +137,13 @@ if (exists('app/src/main/AndroidManifest.xml')) {
   // 真机实测发现基线漏声明，L1 悬浮能力因此完全不可授权。
   if (!manifest.includes('android.permission.SYSTEM_ALERT_WINDOW')) {
     errors.push('Manifest: SYSTEM_ALERT_WINDOW missing (L1 overlay capability)');
+  }
+  // P4 媒体卡片：服务未声明时通知使用权无法授予，音乐卡片会永远停在占位状态。
+  if (!manifest.includes('com.ddzm.media.MediaNotificationService')) {
+    errors.push('Manifest: MediaNotificationService missing (P4 media card)');
+  }
+  if (!manifest.includes('android.permission.BIND_NOTIFICATION_LISTENER_SERVICE')) {
+    errors.push('Manifest: BIND_NOTIFICATION_LISTENER_SERVICE missing');
   }
 }
 if (!exists('app/src/main/res/navigation/nav_graph_car.xml')) {

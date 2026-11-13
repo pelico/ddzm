@@ -9,6 +9,7 @@ import android.os.Looper
 import android.provider.Settings
 import android.view.Gravity
 import android.view.View
+import android.view.ViewGroup
 import android.widget.LinearLayout
 import android.widget.TextView
 import com.ddzm.core.Capability
@@ -19,6 +20,10 @@ import com.ddzm.core.card.CardTheme
 import com.ddzm.core.card.CardView
 import com.ddzm.core.contract.AppCatalog
 import com.ddzm.core.contract.AppInfo
+import com.ddzm.core.contract.MediaSnapshot
+import com.ddzm.core.contract.MediaStateSource
+import com.ddzm.core.window.WindowLevel
+import com.ddzm.core.window.WindowRequest
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -170,50 +175,166 @@ class AppListCardFactory : CardFactory {
     }
 }
 
-/** 音乐卡片：P3 显示状态与授权入口，P4 接 MediaSession / 通知监听。 */
+/**
+ * 音乐卡片（P4）：读取 MediaSession 的真实曲目 / 播放状态并控制播放。
+ *
+ * 氢桌面「左边音乐」的正确形态 —— 桌面自绘卡片，不嵌入第三方 Activity。
+ * 未授予「通知使用权」时服务不会绑定，卡片自动降级为授权引导。
+ */
 class MusicCardFactory : CardFactory {
     override fun create(context: CardContext): CardView {
-        val title = label(context, "音乐", 18f, true)
-        val status = hint(context, "")
-        val action = action(context, "开启通知监听") { notificationSettings(it) }
-        return SimpleCardView(column(context, title, status, action)) { ctx ->
-            val granted = ctx.layoutContext.capabilities.has(Capability.NOTIFICATION_LISTENER)
-            status.text = if (granted) "已授权 · 等待播放信息（P4 接入）"
-            else "未授权通知监听 · 授权后可读取播放信息"
-            title.setTextColor(ctx.palette.foreground)
-            status.setTextColor(ctx.palette.muted)
-            action.setTextColor(ctx.palette.accent)
+        val source: MediaStateSource? = context.services.find(ServiceKeys.MEDIA_STATE)
+        val title = label(context, "音乐", 17f, true).apply { maxLines = 1 }
+        val track = label(context, "暂无播放信息", 16f, true).apply { maxLines = 1 }
+        val artist = hint(context, "").apply { maxLines = 1 }
+        val extra = hint(context, "").apply { maxLines = 1 }
+        val grant = action(context, "开启通知监听") { notificationSettings(it) }
+        val open = action(context, "打开播放器") { ctx -> openPlayer(ctx, source) }
+
+        val controls = LinearLayout(context.appContext).apply {
+            orientation = LinearLayout.HORIZONTAL
         }
+        val previous = action(context, "上一首") { control(source) { previous() } }
+        val toggle = action(context, "播放 / 暂停") { togglePlay(source) }
+        val next = action(context, "下一首") { control(source) { next() } }
+        for (button in listOf(previous, toggle, next)) {
+            controls.addView(
+                button,
+                LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f)
+            )
+        }
+
+        val root = column(context, title, track, artist, extra, controls, open, grant)
+        var unsubscribe: (() -> Unit)? = null
+
+        fun applySnapshot(snapshot: MediaSnapshot, granted: Boolean) {
+            track.text = if (snapshot.hasTrack) snapshot.title.ifBlank { "未知曲目" }
+            else "暂无播放信息"
+            artist.text = when {
+                !granted -> "需要「通知使用权」才能读取播放信息"
+                !snapshot.sessionActive -> "已授权 · 等待播放器建立会话"
+                snapshot.artist.isBlank() -> playStateText(snapshot.isPlaying)
+                else -> snapshot.artist + " · " + playStateText(snapshot.isPlaying)
+            }
+            extra.text = when {
+                snapshot.album.isNotBlank() -> snapshot.album
+                snapshot.packageName.isNotBlank() -> "来源 " + snapshot.packageName
+                else -> "桌面自绘卡片 · MediaSession"
+            }
+            toggle.text = if (snapshot.isPlaying) "暂停" else "播放"
+            val usable = snapshot.sessionActive
+            previous.isEnabled = usable
+            toggle.isEnabled = usable
+            next.isEnabled = usable
+            grant.visibility = if (granted) View.GONE else View.VISIBLE
+        }
+
+        return SimpleCardView(
+            root,
+            bindBlock = { ctx ->
+                val granted = ctx.layoutContext.capabilities.has(Capability.NOTIFICATION_LISTENER)
+                unsubscribe?.invoke()
+                unsubscribe = source?.subscribe { applySnapshot(it, granted) }
+                if (source == null) applySnapshot(MediaSnapshot(), granted)
+                title.setTextColor(ctx.palette.foreground)
+                track.setTextColor(ctx.palette.foreground)
+                artist.setTextColor(ctx.palette.muted)
+                extra.setTextColor(ctx.palette.muted)
+                grant.setTextColor(ctx.palette.accent)
+                open.setTextColor(ctx.palette.accent)
+                for (button in listOf(previous, toggle, next)) {
+                    button.setTextColor(ctx.palette.accent)
+                }
+            },
+            detachBlock = {
+                unsubscribe?.invoke()
+                unsubscribe = null
+            }
+        )
+    }
+
+    private fun playStateText(playing: Boolean): String = if (playing) "正在播放" else "已暂停"
+
+    private fun control(source: MediaStateSource?, block: MediaTransportScope.() -> Boolean) {
+        val transport = source?.transport() ?: return
+        if (MediaTransportScope(transport).block()) source.refresh()
+    }
+
+    private fun togglePlay(source: MediaStateSource?) {
+        val transport = source?.transport() ?: return
+        val playing = source.current().isPlaying
+        val ok = if (playing) transport.pause() else transport.play()
+        if (ok) source.refresh()
+    }
+
+    /** 让控制 lambda 直接写 next()/previous()，不必重复 transport 前缀。 */
+    private class MediaTransportScope(private val t: com.ddzm.core.contract.MediaTransport) {
+        fun next(): Boolean = t.next()
+        fun previous(): Boolean = t.previous()
+    }
+
+    private fun openPlayer(ctx: CardContext, source: MediaStateSource?) {
+        val fromSession = source?.current()?.packageName?.takeIf { it.isNotBlank() }
+        val catalog: AppCatalog? = ctx.services.find(ServiceKeys.APP_CATALOG)
+        val fromCatalog = catalog?.list()
+            ?.firstOrNull { it.category == AppInfo.CATEGORY_MUSIC }?.packageName
+        val pkg = fromSession ?: fromCatalog ?: return
+        val intent = ctx.appContext.packageManager.getLaunchIntentForPackage(pkg) ?: return
+        runCatching { ctx.appContext.startActivity(intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) }
     }
 }
 
-/** 导航卡片：地图画面由第三方 App 自身悬浮窗绘制（L1），这里只做入口与权限引导。 */
+/**
+ * 导航卡片（P4）：地图画面仍由地图 App 自身的悬浮窗绘制（L1 氢桌面路线），
+ * 但启动动作改走 Framework.dispatch 降级链，并把实际落在哪一级显示出来。
+ *
+ * 注意：手机上装的是手机版高德，不会画悬浮共存窗；「左音乐右导航」需要在
+ * 真实车机 + 高德车机悬浮共存版上验证（docs/DEVICE-FINDINGS.md）。
+ */
 class NavCardFactory : CardFactory {
     override fun create(context: CardContext): CardView {
         val title = label(context, "导航 / 主内容区", 20f, true)
         val status = hint(context, "地图画面由地图 App 的悬浮窗提供（氢桌面路线）")
+        val dispatchInfo = hint(context, "尚未启动地图").apply { maxLines = 3 }
         val overlay = action(context, "开启悬浮窗权限") { overlaySettings(it) }
-        val map = action(context, "启动地图应用") { ctx -> launchMap(ctx) }
-        return SimpleCardView(column(context, title, status, overlay, map)) { ctx ->
+        val map = action(context, "启动地图应用") { ctx -> launchMap(ctx, dispatchInfo) }
+        return SimpleCardView(column(context, title, status, dispatchInfo, overlay, map)) { ctx ->
             val granted = ctx.layoutContext.capabilities.has(Capability.OVERLAY_WINDOW)
             overlay.text = if (granted) "悬浮窗已授权 · 可引导地图 App 开启悬浮共存"
             else "开启悬浮窗权限（车机地图悬浮共存前置）"
             title.setTextColor(ctx.palette.foreground)
             status.setTextColor(ctx.palette.muted)
+            dispatchInfo.setTextColor(ctx.palette.muted)
             overlay.setTextColor(ctx.palette.accent)
             map.setTextColor(ctx.palette.accent)
         }
     }
 
-    private fun launchMap(ctx: CardContext) {
+    private fun launchMap(ctx: CardContext, output: TextView) {
         val catalog: AppCatalog? = ctx.services.find(ServiceKeys.APP_CATALOG)
-        val target = catalog?.list()?.firstOrNull { it.category == AppInfo.CATEGORY_NAV }
-            ?: return
-        val intent = ctx.appContext.packageManager.getLaunchIntentForPackage(target.packageName)
-            ?: return
-        runCatching {
-            ctx.appContext.startActivity(intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+        val apps = catalog?.list().orEmpty()
+        val target = apps.firstOrNull { it.category == AppInfo.CATEGORY_NAV }
+            ?: apps.firstOrNull { looksLikeMap(it.packageName) }
+        if (target == null) {
+            output.text = "未找到地图应用"
+            return
         }
+        val result = WindowLauncher.dispatch(
+            ctx,
+            WindowRequest(
+                targetPackage = target.packageName,
+                targetActivity = target.activityName,
+                cardId = "nav",
+                preferredLevel = WindowLevel.L2_SPLIT_SCREEN
+            )
+        )
+        output.text = result.describe()
+    }
+
+    private fun looksLikeMap(packageName: String): Boolean {
+        val pkg = packageName.lowercase()
+        return listOf("amap", "autonavi", "minimap", "baidumap", "map", "navi", "here")
+            .any { pkg.contains(it) }
     }
 }
 
@@ -252,11 +373,20 @@ class QuickCardFactory : CardFactory {
 class StatusCardFactory : CardFactory {
     override fun create(context: CardContext): CardView {
         val title = label(context, "设备能力", 16f, true)
-        val status = hint(context, "")
+        val status = hint(context, "").apply { maxLines = 7 }
         return SimpleCardView(column(context, title, status)) { ctx ->
             val c = ctx.layoutContext
+            val media: MediaStateSource? = ctx.services.find(ServiceKeys.MEDIA_STATE)
+            val level = when {
+                c.capabilities.has(Capability.SHELL_SPLIT_SCREEN) -> "L2 可用（仍需运行时验证）"
+                c.capabilities.has(Capability.OVERLAY_WINDOW) -> "L1 悬浮可用"
+                else -> "L0 桌面卡片"
+            }
             status.text = "画像=${c.deviceClass} 横屏=${c.isLandscape} " +
-                "${c.widthDp}x${c.heightDp}dp\n能力=${c.capabilities.granted}"
+                "${c.widthDp}x${c.heightDp}dp\n" +
+                "能力=${c.capabilities.granted}\n" +
+                "窗口=$level\n" +
+                "媒体=${if (media?.current()?.sessionActive == true) "有会话" else "无会话"}"
             title.setTextColor(ctx.palette.foreground)
             status.setTextColor(ctx.palette.muted)
         }

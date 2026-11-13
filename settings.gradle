@@ -4,4 +4,5 @@ include ':config'
 include ':appmodel'
 include ':window'
 include ':card'
+include ':media'
 rootProject.name = "ddzm"

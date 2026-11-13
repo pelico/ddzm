@@ -12,6 +12,8 @@ import com.ddzm.core.Framework
 import com.ddzm.core.LauncherScope
 import com.ddzm.core.ServiceKeys
 import com.ddzm.core.layout.DefaultLayoutEngine
+import com.ddzm.media.MediaModule
+import com.ddzm.media.MediaStateHolder
 import com.ddzm.window.NoopShellExecutor
 import com.ddzm.window.WindowCapabilityProbe
 import com.ddzm.window.WindowModule
@@ -40,12 +42,15 @@ class DdzmApplication : Application() {
         scope = newScope
 
         newScope.layouts.register(Framework.DEFAULT_LAYOUT_ENGINE, DefaultLayoutEngine())
-        newScope.services.put(ServiceKeys.WINDOW_HOST, AndroidWindowHost(this))
+        // P4：卡片要能走 Framework.dispatch 的窗口降级链，把 scope 作为服务暴露出去。
+        newScope.services.put(ServiceKeys.LAUNCHER_SCOPE, newScope)
+        newScope.services.put(ServiceKeys.WINDOW_HOST, AndroidWindowHost(this, newScope))
 
         val plugins = listOf(
             ConfigPlugin(configStore),
             AppModelPlugin(PackageManagerAppRepository(this)),
             WindowModule(capabilityProbe, shell),
+            MediaModule(MediaStateHolder.repository),
             CardModule()
         )
         val installed = plugins.map { plugin -> plugin.id to newScope.install(plugin) }
@@ -73,8 +78,12 @@ class DdzmApplication : Application() {
     }
 
     /** 从设置页返回桌面时重探能力：悬浮窗授权、通知监听、Shizuku 失效都要立即反映到卡片。 */
-    fun refreshCapabilities(): com.ddzm.core.CapabilitySnapshot =
-        scope.refreshCapabilities(capabilityProbe)
+    fun refreshCapabilities(): com.ddzm.core.CapabilitySnapshot {
+        val snapshot = scope.refreshCapabilities(capabilityProbe)
+        // 通知使用权刚授予时重新枚举一次 MediaSession，卡片不用等下一次播放事件。
+        MediaStateHolder.repository.refresh()
+        return snapshot
+    }
 
     companion object {
         private const val TAG = "ddzm"

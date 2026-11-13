@@ -42,6 +42,15 @@ object ServiceKeys {
     const val CAPABILITY_PROBE = "capability.probe"
     const val SHELL_EXECUTOR = "shell.executor"
     const val WINDOW_HOST = "window.host"
+
+    /** P4：媒体状态源（:media 注册，:card 消费）。 */
+    const val MEDIA_STATE = "media.state"
+
+    /**
+     * P4：把 scope 自身注册为服务，让卡片能调用 Framework.dispatch 走窗口降级链。
+     * 弱类型注册表本来就是为此设计的，不需要给 CardContext 增加新字段。
+     */
+    const val LAUNCHER_SCOPE = "launcher.scope"
 }
 
 /**

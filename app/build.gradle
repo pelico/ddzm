@@ -55,6 +55,7 @@ dependencies {
     implementation project(':appmodel')
     implementation project(':window')
     implementation project(':card')
+    implementation project(':media')
 
     implementation fileTree(dir: "libs", include: ["*.jar"])
     implementation libs.kotlin.stdlib
