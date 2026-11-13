@@ -55,6 +55,13 @@ class CarHomeFragment : Fragment() {
     private val density: Float get() = resources.displayMetrics.density
     private fun dp(value: Int): Int = (density * value).toInt()
 
+    /** 手机强制横屏预览时短边 ~369dp；真车机 / 平板短边通常 >= 480dp。 */
+    private val compact: Boolean
+        get() = minOf(
+            resources.configuration.screenWidthDp,
+            resources.configuration.screenHeightDp
+        ) < 450
+
     override fun onCreateView(
         inflater: android.view.LayoutInflater,
         container: ViewGroup?,
@@ -93,9 +100,12 @@ class CarHomeFragment : Fragment() {
         }
         host = CardHostView(ctx)
 
-        root.addView(toolbarScroll, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(48)))
+        // 紧凑屏压缩工具条 / Dock，把高度让给卡片区域；大屏保持 P3 尺寸。
+        val toolbarHeight = if (compact) 36 else 48
+        val dockHeight = if (compact) 48 else 64
+        root.addView(toolbarScroll, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(toolbarHeight)))
         root.addView(host, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f))
-        root.addView(dockScroll, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(64)))
+        root.addView(dockScroll, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(dockHeight)))
         return root
     }
 
@@ -241,8 +251,9 @@ class CarHomeFragment : Fragment() {
             textSize = 13f
             setTextColor(theme.accent)
             gravity = Gravity.CENTER
-            minHeight = dp(36)
-            setPadding(dp(16), dp(8), dp(16), dp(8))
+            minHeight = dp(if (compact) 26 else 36)
+            val vertical = dp(if (compact) 4 else 8)
+            setPadding(dp(16), vertical, dp(16), vertical)
             background = GradientDrawable().apply {
                 cornerRadius = dp(10).toFloat()
                 setColor(theme.surface)
@@ -261,7 +272,8 @@ class CarHomeFragment : Fragment() {
             textSize = 14f
             setTextColor(theme.foreground)
             gravity = Gravity.CENTER
-            setPadding(dp(18), dp(12), dp(18), dp(12))
+            val vertical = dp(if (compact) 5 else 12)
+            setPadding(dp(18), vertical, dp(18), vertical)
             background = GradientDrawable().apply {
                 cornerRadius = dp(12).toFloat()
                 setColor(theme.surface)

@@ -40,6 +40,10 @@ private class SimpleCardView(
 
 private val CardContext.palette: CardTheme get() = theme
 
+/** 短边 < 450dp（手机横屏预览 / 带屏音箱）时改用紧凑排版。 */
+private fun CardContext.isCompact(): Boolean =
+    minOf(layoutContext.widthDp, layoutContext.heightDp) in 1..449
+
 private fun label(ctx: CardContext, text: String, size: Float, bold: Boolean = false): TextView =
     TextView(ctx.appContext).apply {
         this.text = text
@@ -62,16 +66,18 @@ private fun hint(ctx: CardContext, text: String): TextView =
 private fun column(ctx: CardContext, vararg children: View): LinearLayout =
     LinearLayout(ctx.appContext).apply {
         orientation = LinearLayout.VERTICAL
-        setPadding(20, 16, 20, 16)
+        val h = if (ctx.isCompact()) 10 else 20
+        val v = if (ctx.isCompact()) 6 else 16
+        setPadding(h, v, h, v)
         children.forEach { addView(it) }
     }
 
 private fun action(ctx: CardContext, text: String, onClick: (CardContext) -> Unit): TextView =
     TextView(ctx.appContext).apply {
         this.text = text
-        textSize = 13f
+        textSize = if (ctx.isCompact()) 12f else 13f
         setTextColor(ctx.palette.accent)
-        setPadding(0, 14, 0, 6)
+        setPadding(0, if (ctx.isCompact()) 6 else 14, 0, if (ctx.isCompact()) 3 else 6)
         setOnClickListener { onClick(ctx) }
     }
 
@@ -111,8 +117,10 @@ class ClockCardFactory : CardFactory {
                 clock.textSize = when {
                     shortest >= 700 -> 52f
                     shortest >= 500 -> 40f
-                    else -> 24f
+                    shortest >= 450 -> 24f
+                    else -> 16f
                 }
+                date.textSize = if (shortest < 450) 10f else 12f
                 clock.setTextColor(ctx.palette.foreground)
                 date.setTextColor(ctx.palette.muted)
                 handler.removeCallbacks(ticker)
@@ -187,7 +195,11 @@ class MusicCardFactory : CardFactory {
         val title = label(context, "音乐", 17f, true).apply { maxLines = 1 }
         val track = label(context, "暂无播放", 16f, true).apply { maxLines = 1 }
         val artist = hint(context, "").apply { maxLines = 1 }
-        val extra = hint(context, "").apply { maxLines = 1 }
+        val extra = hint(context, "").apply {
+            maxLines = 1
+            // 紧凑屏优先保证「曲目 + 状态 + 控制」，专辑 / 包名行让位。
+            if (context.isCompact()) visibility = View.GONE
+        }
         val grant = action(context, "开启通知监听") { notificationSettings(it) }
         val open = action(context, "打开播放器") { ctx -> openPlayer(ctx, source) }
 
@@ -304,11 +316,13 @@ class MusicCardFactory : CardFactory {
 class NavCardFactory : CardFactory {
     override fun create(context: CardContext): CardView {
         val title = label(context, "导航 / 主内容区", 20f, true)
-        val status = hint(context, "地图画面由地图 App 的悬浮窗提供（氢桌面路线）")
+        val status = hint(context, "地图画面由地图 App 的悬浮窗提供（氢桌面路线）").apply {
+            maxLines = if (context.isCompact()) 1 else 3
+        }
         val dispatchInfo = hint(
             context,
             WindowDispatchLog.last.ifBlank { "尚未启动地图" }
-        ).apply { maxLines = 3 }
+        ).apply { maxLines = if (context.isCompact()) 2 else 3 }
         val overlay = action(context, "开启悬浮窗权限") { overlaySettings(it) }
         val map = action(context, "启动地图应用") { ctx -> launchMap(ctx, dispatchInfo) }
         return SimpleCardView(column(context, title, status, dispatchInfo, overlay, map)) { ctx ->
@@ -388,7 +402,9 @@ class QuickCardFactory : CardFactory {
 class StatusCardFactory : CardFactory {
     override fun create(context: CardContext): CardView {
         val title = label(context, "设备能力", 16f, true)
-        val status = hint(context, "").apply { maxLines = 7 }
+        val status = hint(context, "").apply {
+            maxLines = if (context.isCompact()) 4 else 7
+        }
         return SimpleCardView(column(context, title, status)) { ctx ->
             val c = ctx.layoutContext
             val media: MediaStateSource? = ctx.services.find(ServiceKeys.MEDIA_STATE)

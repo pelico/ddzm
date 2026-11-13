@@ -121,6 +121,17 @@ class CardHostView(context: Context) : FrameLayout(context) {
         val card = cardId?.let { scope.cards.create(it, cardContext) }
         val title = cardId?.let { scope.cards.descriptor(it)?.title } ?: "空槽位"
 
+        // 手机强制横屏时高度只有 ~370dp，三区右侧每槽位不足 80dp。
+        // 紧凑布局压缩标题栏与留白，把尽可能多的高度还给内容（内容仍可滚动）。
+        val shortest = minOf(
+            cardContext.layoutContext.widthDp,
+            cardContext.layoutContext.heightDp
+        )
+        val compact = shortest in 1..449
+        val headerHeight = dp(if (compact) 22 else 32)
+        val bodyTop = dp(if (compact) 24 else 34)
+        val edge = dp(if (compact) 3 else 6)
+
         val frame = FrameLayout(context).apply {
             background = GradientDrawable().apply {
                 cornerRadius = dp(14).toFloat()
@@ -158,21 +169,21 @@ class CardHostView(context: Context) : FrameLayout(context) {
         frame.addView(body, FrameLayout.LayoutParams(
             ViewGroup.LayoutParams.MATCH_PARENT,
             ViewGroup.LayoutParams.MATCH_PARENT
-        ).apply { setMargins(dp(6), dp(34), dp(6), dp(6)) })
+        ).apply { setMargins(edge, bodyTop, edge, edge) })
 
         val header = TextView(context).apply {
             text = if (card == null) "$title · 拖入卡片" else "$title  ·  长按拖动"
-            textSize = 12f
+            textSize = if (compact) 10f else 12f
             setTextColor(theme.muted)
             gravity = Gravity.CENTER_VERTICAL
             maxLines = 1
             ellipsize = TextUtils.TruncateAt.END
-            setPadding(dp(12), dp(4), dp(12), dp(4))
+            setPadding(dp(if (compact) 8 else 12), dp(2), dp(if (compact) 8 else 12), dp(2))
             setBackgroundColor(theme.background)
         }
         frame.addView(header, FrameLayout.LayoutParams(
-            ViewGroup.LayoutParams.MATCH_PARENT, dp(32)
-        ).apply { setMargins(dp(6), dp(2), dp(6), 0) })
+            ViewGroup.LayoutParams.MATCH_PARENT, headerHeight
+        ).apply { setMargins(edge, dp(2), edge, 0) })
 
         if (cardId != null) {
             header.setOnLongClickListener { v ->
