@@ -92,7 +92,7 @@ preferredLevel = L2_SPLIT_SCREEN
 | 音乐卡片显示真实曲目 | ⚠️ 需手动播放 | 已建立会话但设备当前无曲目 metadata；手动播放一首歌即可看到标题 / 歌手 |
 | **左音乐右导航同屏** | ❌ 需目标设备 | 需真实车机 / 平板 + **高德车机悬浮共存版**；手机版高德不画悬浮共存窗 |
 | **L2 真实系统分屏** | ❌ 需 Shizuku + 兼容设备 | 默认不启用；需注入 `splitCommand` 与 verifier |
-| **默认桌面 / HOME role** | ❌ 需 AOSP 类设备 | 荣耀 OEM 锁死，见 `DEVICE-FINDINGS.md` 第 1 节 |
+| **默认桌面 / HOME role** | ✅ 已在 MuMu 验证 | `cmd role add-role-holder` + 选择器「始终」后按 HOME 直达 ddzm；荣耀 OEM 锁死属个案，见 `DEVICE-FINDINGS.md` 第 4 节 |
 
 ### 关键命令
 

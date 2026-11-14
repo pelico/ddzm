@@ -94,3 +94,37 @@ dumpsys: splitScreenState:0 （全部 20 处均为 0）
 - HOME 相关试验结束后务必恢复：
   `cmd package set-home-activity com.hihonor.android.launcher/.unihome.UniHomeLauncher`
   （该命令在本设备返回 Success），并用 `cmd role get-role-holders android.app.role.HOME` 与 HOME 键复核。
+
+## 4. MuMu 模拟器：默认桌面验证通过（闭合原缺口）
+
+- 日期：2026-11-14
+- 设备：MuMu 模拟器（本地 adb `127.0.0.1:16384`，Android 12 / SDK 32；
+  `ro.product.brand` 被 MuMu 伪装为 `HUAWEI`、型号 `ALN-AL1`，属正常设备画像伪装，不影响验证）
+- 被测包：`app.olauncher.debug`（P4 最终包 `ddzm-debug-p4-9af58fe.apk`，commit `9af58fe`）
+- 通道：本地 adb TCP（守护进程在每次工具调用后可能被回收，`connect` 与后续命令必须同批次）
+
+**验证步骤与结果**
+
+| 步骤 | 命令 / 动作 | 结果 |
+|---|---|---|
+| HOME 候选 | `cmd package query-activities -a MAIN -c HOME` | 含 `app.olauncher.debug/app.olauncher.MainActivity`（Manifest 正确） |
+| 授予 HOME 角色 | `cmd role add-role-holder --user 0 android.app.role.HOME app.olauncher.debug` | `exit 0` |
+| 角色持有者 | `dumpsys role` | `name=android.app.role.HOME` / `holders=app.olauncher.debug` |
+| 首次按 HOME | 系统弹出「选择主屏幕应用」选择器 | 候选含 **Olauncher（即 ddzm，包名 `app.olauncher.debug`）** 与 Lawnchair；点「始终」 |
+| 二次按 HOME | `dumpsys activity` | `topResumedActivity=app.olauncher.debug/app.olauncher.MainActivity`，**不再弹选择器** |
+| 车机预览启动 | `am start ... --ez ddzm_car_preview true` | 三区界面正常；能力探测 `HOME=Y / 悬浮=Y / 通知=N / 分屏=N / 窗口=L1 悬浮` |
+
+**结论**
+
+1. **默认桌面在 MuMu 上完全可用**：ddzm 能正常成为 HOME 角色持有者，并按 HOME 直达首页。
+   这从正面证明「荣耀 X50 GT 的失败是 OEM 锁死，不是本工程代码问题」——第 1 节那个缺口
+   只在 OEM 锁设备上成立，在非锁环境（模拟器、AOSP 类车机 / 平板 / 学习机）是可达的。
+2. **首按 HOME 弹选择器是标准 Android 行为**（存在多个 HOME 应用时让用户选默认），
+   点「始终」后即固定，符合用户原始诉求「能正常申请权限设置为默认启动器」。
+3. **能力探针正确反映角色状态**：MuMu 上 `Capability.ROLE_HOME` 探测为 `HOME=Y`，与 `dumpsys role` 一致；
+   这说明 `WindowCapabilityProbe` 在真实授予场景下能拿到 HOME 能力（荣耀上拿不到是 OEM 锁导致角色没持有）。
+4. 车机三区界面在 MuMu（竖屏、强制 `isLandscape=true` 预览）同样完整渲染，无崩溃。
+
+**还原方式（如需把 MuMu 默认桌面改回）**：系统设置 → 默认应用 → 桌面 选回 MuMu 桌面，
+或 `cmd role remove-role-holder --user 0 android.app.role.HOME app.olauncher.debug`。
+本次验证后 ddzm 暂留在 MuMu 作为默认桌面，方便后续联调。
